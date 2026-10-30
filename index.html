@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dynamic Characteristics Toolkit</title>
+<meta name="description" content="ENCS4380 Homework 1 — interactive toolkit for the dynamic characteristics of measurement systems. Module 1: first-order time response of a thermometer.">
+
+<!-- Plotly (basic bundle: scatter/line plots + log axes, smaller download for phones) -->
+<script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js" charset="utf-8"></script>
+
+<style>
+/* ===== Colour tokens (light) — every colour on the page and in the plots comes from here ===== */
+:root {
+  color-scheme: light;
+  --bg: #f3f3f1;
+  --surface: #fcfcfb;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #76756f;
+  --border: #e2e1dc;
+  --grid: #ebeae6;
+  --axis: #c9c8c2;
+  --s1: #2a78d6;          /* main series: the response y(t) */
+  --s2: #eb6834;          /* highlights: markers, lag/error segments, fitted line */
+  --ideal: #52514e;       /* ideal (instant) output line */
+  --accent-soft: #e8f0fb;
+  --pass: #0b7a3a; --pass-bg: #e3f4ea;
+  --fail: #c0322f; --fail-bg: #fbe7e6;
+}
+/* ===== Colour tokens (dark) — follows the phone/PC theme ===== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f;
+    --border: #33322f; --grid: #2a2a28; --axis: #4a4945;
+    --s1: #3987e5; --s2: #d95926; --ideal: #c3c2b7; --accent-soft: #1d2a3c;
+    --pass: #5cc98a; --pass-bg: #173524; --fail: #f07a77; --fail-bg: #3a1b1a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --text: #f0efec; --text-2: #c3c2b7; --muted: #9a998f;
+  --border: #33322f; --grid: #2a2a28; --axis: #4a4945;
+  --s1: #3987e5; --s2: #d95926; --ideal: #c3c2b7; --accent-soft: #1d2a3c;
+  --pass: #5cc98a; --pass-bg: #173524; --fail: #f07a77; --fail-bg: #3a1b1a;
+}
+
+/* ===== Base ===== */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+h1, h2, h3 { line-height: 1.25; margin: 0; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.3rem; }
+h3 { font-size: 1.02rem; }
+p { margin: 0; }
+i { font-family: Georgia, "Times New Roman", serif; }
+
+/* ===== Header + module navigation ===== */
+.site-header { background: var(--surface); border-bottom: 1px solid var(--border); }
+.site-header .wrap { padding-top: 20px; padding-bottom: 14px; }
+.site-header .course { color: var(--muted); font-size: .85rem; letter-spacing: .02em; }
+.site-header .sub { color: var(--text-2); margin-top: 4px; }
+.nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.nav a {
+  color: var(--s1); text-decoration: none; font-weight: 600; font-size: .9rem;
+  padding: 6px 12px; border-radius: 999px; background: var(--accent-soft);
+}
+.nav a:hover { text-decoration: underline; }
+
+/* ===== Module layout ===== */
+.module { padding: 24px 0 8px; }
+.module-head { margin-bottom: 16px; }
+.eyebrow { color: var(--s1); font-weight: 700; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+.lead { color: var(--text-2); margin-top: 6px; max-width: 75ch; }
+.model { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 12px; }
+.model span {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 12px; font-family: Georgia, "Times New Roman", serif; font-size: 1.05rem;
+}
+.layout, .grid-2 { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.main { display: grid; gap: 16px; min-width: 0; }
+@media (min-width: 900px) {
+  .layout { grid-template-columns: 300px minmax(0, 1fr); }
+  .layout > .controls { position: sticky; top: 16px; align-self: start; }
+  .grid-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 16px; }
+}
+@media (max-width: 899px) { .grid-2 { margin-top: 16px; } }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+.caption { color: var(--text-2); font-size: .9rem; margin-top: 4px; }
+
+/* ===== Plots ===== */
+.plot { width: 100%; height: 340px; margin-top: 8px; }
+@media (max-width: 600px) { .plot { height: 290px; } }
+.plot-fallback { display: grid; place-items: center; height: 100%; color: var(--text-2); text-align: center; padding: 16px; border: 1px dashed var(--border); border-radius: 8px; }
+
+/* ===== Controls (shared slider + toggle styles) ===== */
+.ctrl { margin-top: 14px; }
+.ctrl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ctrl-head label, .ctrl-head .lbl { font-weight: 600; font-size: .92rem; }
+.ctrl-head output { font-variant-numeric: tabular-nums; color: var(--text-2); font-size: .92rem; }
+.ctrl input[type=range] { width: 100%; height: 32px; margin: 2px 0 0; accent-color: var(--s1); cursor: pointer; }
+.seg { display: flex; margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button {
+  flex: 1; min-height: 40px; border: 0; background: transparent; color: var(--text);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--s1); color: #fff; }
+
+.btn {
+  min-height: 44px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+}
+.btn:hover { border-color: var(--axis); }
+.btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
+.btn.block { width: 100%; margin-top: 18px; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+/* ===== Readout cards ===== */
+.readouts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-top: 10px; }
+.readout { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.readout .k { color: var(--text-2); font-size: .82rem; }
+.readout .v { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.readout .n { color: var(--muted); font-size: .8rem; }
+
+/* ===== Predict-then-check quiz ===== */
+.quiz-meta { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+.quiz-q { font-weight: 600; margin-top: 10px; }
+.quiz-opts { display: grid; gap: 8px; margin-top: 10px; }
+.quiz-opt {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.quiz-opt input { margin-top: 4px; accent-color: var(--s1); }
+.quiz-opt.is-correct { border-color: var(--pass); background: var(--pass-bg); }
+.quiz-opt.is-wrong { border-color: var(--fail); background: var(--fail-bg); }
+.quiz-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.quiz-fb { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); }
+.quiz-fb[hidden] { display: none; }
+.quiz-fb .verdict { font-weight: 700; }
+.quiz-fb .verdict.ok { color: var(--pass); }
+.quiz-fb .verdict.bad { color: var(--fail); }
+
+/* ===== Validation table ===== */
+.table-scroll { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--text-2); font-weight: 600; font-size: .82rem; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Phones: each table row becomes a small card (test name on top, values below) */
+@media (max-width: 600px) {
+  thead { display: none; }
+  tr { display: grid; grid-template-columns: 1fr 1fr auto; gap: 2px 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  td { border: 0; padding: 0; }
+  td:first-child { grid-column: 1 / -1; font-weight: 600; }
+  td[data-label]::before { content: attr(data-label); display: block; color: var(--muted); font-size: .75rem; }
+  td:last-child { align-self: end; }
+}
+.badge { white-space: nowrap; display: inline-block; font-weight: 700; font-size: .78rem; padding: 2px 8px; border-radius: 999px; }
+.badge.pass { color: var(--pass); background: var(--pass-bg); }
+.badge.fail { color: var(--fail); background: var(--fail-bg); }
+.summary { margin-top: 10px; font-weight: 600; }
+
+footer { color: var(--muted); font-size: .85rem; padding: 24px 0 32px; }
+</style>
+</head>
+
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <p class="course">ENCS4380 · Homework 1 · Team 22</p>
+    <h1>Dynamic Characteristics Interactive Toolkit</h1>
+    <p class="sub">Move the sliders and watch how a measuring instrument responds over time.</p>
+    <!-- Filled automatically from every <section class="module"> (see buildNav) -->
+    <nav class="nav" id="nav" aria-label="Modules"></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <noscript><p class="card" style="margin-top:16px">This toolkit needs JavaScript to draw the plots. Please enable it and reload.</p></noscript>
+
+  <!-- ================= MODULE 1: First-order time response ================= -->
+  <section class="module" id="m1" data-nav="Module 1 · First-order response">
+    <div class="module-head">
+      <p class="eyebrow">Module 1</p>
+      <h2>First-order time response — thermometer</h2>
+      <p class="lead">A thermometer bulb cannot change temperature instantly: heat must flow in first. That makes it a first-order system, fully described by its static gain <i>K</i> and time constant <i>τ</i>.</p>
+      <div class="model">
+        <span><i>τ</i>·d<i>y</i>/d<i>t</i> + <i>y</i> = <i>K</i>·<i>x</i>(<i>t</i>)</span>
+        <span><i>G</i>(<i>s</i>) = <i>K</i> / (<i>τs</i> + 1)</span>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- Controls panel (sticky on wide screens) -->
+      <aside class="card controls" aria-labelledby="m1-ctrl-title">
+        <h3 id="m1-ctrl-title">Controls</h3>
+        <div id="m1-controls"></div>
+        <button class="btn block" id="m1-reset" type="button">Reset to defaults</button>
+      </aside>
+
+      <div class="main">
+        <!-- Plot 1/2: step or ramp response, chosen by the toggle -->
+        <article class="card">
+          <h3 id="m1-resp-title">Step response</h3>
+          <p class="caption" id="m1-resp-cap"></p>
+          <div class="plot" id="m1-resp" role="img" aria-label="Time response of the first-order system"></div>
+        </article>
+
+        <!-- Live readouts -->
+        <article class="card">
+          <h3>Live readouts</h3>
+          <div class="readouts" id="m1-readouts"></div>
+        </article>
+
+        <!-- Plot 3: error fraction on a log axis -->
+        <article class="card">
+          <h3>Error fraction E<sub>m</sub> (log scale)</h3>
+          <p class="caption" id="m1-em-cap"></p>
+          <div class="plot" id="m1-em" role="img" aria-label="Error fraction versus time on a logarithmic axis"></div>
+          <div class="readouts" id="m1-slope"></div>
+        </article>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Predict, then check -->
+      <article class="card">
+        <h3>Predict, then check</h3>
+        <div id="m1-quiz"></div>
+      </article>
+
+      <!-- Validation table -->
+      <article class="card">
+        <h3>Validation</h3>
+        <p class="caption">Our formulas checked against the textbook values, live for the current sliders. Tolerance: 0.1% unless stated.</p>
+        <div class="table-scroll" id="m1-valid"></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- Modules 2–4 go here later: copy the section above, give it a new id + data-nav,
+       and write a new ModuleN object in the script that reuses the shared helpers. -->
+</main>
+
+<footer class="wrap">
+  ENCS4380 Homework 1 · Team 22 · Static page, no server or login. Plots by Plotly.js.
+</footer>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   SHARED HELPERS — reused by every module (1, and later 2–4)
+   ===================================================================== */
+
+// Read a colour token from the CSS (so plots follow light/dark mode)
+const C = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// n evenly spaced numbers from a to b (like MATLAB linspace)
+function linspace(a, b, n) {
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = a + (b - a) * i / (n - 1);
+  return out;
+}
+
+// Format a number: fewer decimals for bigger numbers
+function fmt(x, d) {
+  if (!Number.isFinite(x)) return "—";
+  if (d === undefined) d = Math.abs(x) >= 100 ? 1 : Math.abs(x) >= 10 ? 2 : 3;
+  return x.toFixed(d);
+}
+
+// Least-squares straight line y = slope·x + intercept
+function fitLine(xs, ys) {
+  const n = xs.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i]; sxx += xs[i] * xs[i]; sxy += xs[i] * ys[i]; }
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  return { slope, intercept: (sy - slope * sx) / n };
+}
+
+// Classic 4th-order Runge–Kutta for dy/dt = f(t, y); returns y at t = 0, dt, 2dt, ...
+function rk4(f, y0, dt, steps) {
+  const ys = [y0];
+  let t = 0, y = y0;
+  for (let i = 0; i < steps; i++) {
+    const k1 = f(t, y);
+    const k2 = f(t + dt / 2, y + dt * k1 / 2);
+    const k3 = f(t + dt / 2, y + dt * k2 / 2);
+    const k4 = f(t + dt, y + dt * k3);
+    y += dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6;
+    t += dt;
+    ys.push(y);
+  }
+  return ys;
+}
+
+// Run fn at most once per screen frame (keeps slider dragging smooth)
+function frameThrottle(fn) {
+  let queued = false;
+  return () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; fn(); });
+  };
+}
+
+// Slider with label + live value. Returns {get, set, configure}.
+// cfg = {id, label, min, max, step, value, unit, decimals}
+function createSlider(parent, cfg, onChange) {
+  const wrap = document.createElement("div");
+  wrap.className = "ctrl";
+  wrap.innerHTML = `<div class="ctrl-head"><label for="${cfg.id}"></label><output for="${cfg.id}"></output></div>
+                    <input type="range" id="${cfg.id}">`;
+  parent.appendChild(wrap);
+  const label = wrap.querySelector("label"), out = wrap.querySelector("output"), input = wrap.querySelector("input");
+  let c = {};
+
+  const show = () => { out.textContent = fmt(+input.value, c.decimals) + (c.unit ? " " + c.unit : ""); };
+  // Change label/range/value (used when one slider swaps meaning, e.g. A ↔ r)
+  function configure(newCfg) {
+    c = Object.assign({}, c, newCfg);
+    label.innerHTML = c.label;
+    input.min = c.min; input.max = c.max; input.step = c.step;  // set range before value
+    input.value = c.value;
+    show();
+  }
+  input.addEventListener("input", () => { show(); onChange(+input.value); });
+  configure(cfg);
+  return { get: () => +input.value, set: (v) => { input.value = v; show(); }, configure };
+}
+
+// Segmented on/off toggle (e.g. Step | Ramp). Returns {set}.
+// cfg = {label, options: [{value, label}], value}
+function createToggle(parent, cfg, onChange) {
+  const wrap = document.createElement("div");
+  wrap.className = "ctrl";
+  wrap.innerHTML = `<div class="ctrl-head"><span class="lbl">${cfg.label}</span></div><div class="seg" role="group" aria-label="${cfg.label}"></div>`;
+  parent.appendChild(wrap);
+  const seg = wrap.querySelector(".seg");
+  const buttons = cfg.options.map((o) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = o.label; b.dataset.value = o.value;
+    b.addEventListener("click", () => { set(o.value); onChange(o.value); });
+    seg.appendChild(b);
+    return b;
+  });
+  function set(v) { buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === v))); }
+  set(cfg.value);
+  return { set };
+}
+
+// Plot defaults shared by every chart (colours from CSS tokens, no zoom so phones can scroll)
+function baseLayout() {
+  const axis = { gridcolor: C("--grid"), linecolor: C("--axis"), zeroline: false, fixedrange: true,
+                 tickfont: { color: C("--text-2") }, title: { font: { color: C("--text-2"), size: 12 } } };
+  return {
+    paper_bgcolor: C("--surface"), plot_bgcolor: C("--surface"),
+    font: { family: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif", color: C("--text"), size: 12 },
+    margin: { l: 56, r: 14, t: 10, b: 46 },
+    showlegend: true,
+    legend: { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font: { color: C("--text-2") } },
+    hovermode: "closest", dragmode: false,
+    hoverlabel: { bgcolor: C("--surface"), bordercolor: C("--border"), font: { color: C("--text") } },
+    xaxis: Object.assign({}, axis), yaxis: Object.assign({}, axis),
+  };
+}
+
+// Merge layout overrides one level deep (so xaxis/yaxis keep the shared styling)
+function mergeLayout(base, extra) {
+  const out = Object.assign({}, base);
+  for (const k in extra) {
+    const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+    out[k] = isObj(base[k]) && isObj(extra[k]) ? Object.assign({}, base[k], extra[k]) : extra[k];
+  }
+  return out;
+}
+
+const PLOT_CONFIG = { responsive: true, displayModeBar: false };
+
+// Draw or instantly update a plot (Plotly.react only redraws what changed)
+function drawPlot(divId, traces, layout) {
+  if (!window.Plotly) return;
+  Plotly.react(divId, traces, mergeLayout(baseLayout(), layout || {}), PLOT_CONFIG);
+}
+
+// Small text box on a plot, pointing at (x, y)
+function plotNote(x, y, text, ax, ay) {
+  return { x, y, text, ax, ay, showarrow: true, arrowhead: 0, arrowwidth: 1, arrowcolor: C("--muted"),
+           xanchor: ax >= 0 ? "left" : "right", font: { size: 11, color: C("--text") },
+           bgcolor: C("--surface"), bordercolor: C("--border"), borderpad: 3 };
+}
+
+// Grid of value cards: items = [{label, value, note}]
+function renderReadouts(container, items) {
+  container.innerHTML = items.map((it) =>
+    `<div class="readout"><div class="k">${it.label}</div><div class="v">${it.value}</div>${it.note ? `<div class="n">${it.note}</div>` : ""}</div>`
+  ).join("");
+}
+
+// Test | Expected | Our value | PASS/FAIL table: rows = [{test, expected, ours, pass}]
+function renderValidation(container, rows) {
+  const passed = rows.filter((r) => r.pass).length;
+  container.innerHTML =
+    `<table><thead><tr><th>Test</th><th>Expected</th><th>Our value</th><th>Result</th></tr></thead><tbody>` +
+    rows.map((r) => `<tr><td>${r.test}</td><td class="num" data-label="Expected">${r.expected}</td><td class="num" data-label="Our value">${r.ours}</td>
+      <td><span class="badge ${r.pass ? "pass" : "fail"}">${r.pass ? "✓ PASS" : "✗ FAIL"}</span></td></tr>`).join("") +
+    `</tbody></table><p class="summary">${passed} / ${rows.length} tests pass</p>`;
+}
+
+// Multiple-choice "Predict, then check" box.
+// questions = [{q, options: [...], answer: index, explain, demo}] ; onCheck(question) runs after Check.
+function createQuiz(root, questions, onCheck) {
+  let i = 0, score = 0, answered = 0, checked = false;
+  const name = root.id + "-opt";
+  root.innerHTML = `<p class="quiz-meta"></p><p class="quiz-q"></p>
+    <div class="quiz-opts" role="radiogroup"></div>
+    <div class="quiz-actions">
+      <button class="btn primary" type="button" data-act="check">Check</button>
+      <button class="btn" type="button" data-act="next">Next question →</button>
+    </div>
+    <div class="quiz-fb" aria-live="polite" hidden></div>`;
+  const meta = root.querySelector(".quiz-meta"), qEl = root.querySelector(".quiz-q");
+  const opts = root.querySelector(".quiz-opts"), fb = root.querySelector(".quiz-fb");
+
+  function show() {
+    const q = questions[i];
+    checked = false;
+    meta.textContent = `Question ${i + 1} of ${questions.length} · Score ${score} / ${answered}`;
+    qEl.innerHTML = q.q;
+    opts.innerHTML = q.options.map((o, k) =>
+      `<label class="quiz-opt"><input type="radio" name="${name}" value="${k}"><span>${o}</span></label>`).join("");
+    fb.hidden = true;
+  }
+
+  function check() {
+    const q = questions[i];
+    const picked = root.querySelector(`input[name="${name}"]:checked`);
+    fb.hidden = false;
+    if (!picked) { fb.innerHTML = "Pick an answer first — make your prediction, then press Check."; return; }
+    const ok = +picked.value === q.answer;
+    if (!checked) { answered++; if (ok) score++; checked = true; }   // score only the first check
+    // Mark right / wrong options and lock the answers
+    opts.querySelectorAll(".quiz-opt").forEach((lab, k) => {
+      lab.querySelector("input").disabled = true;
+      if (k === q.answer) lab.classList.add("is-correct");
+      else if (k === +picked.value) lab.classList.add("is-wrong");
+    });
+    meta.textContent = `Question ${i + 1} of ${questions.length} · Score ${score} / ${answered}`;
+    fb.innerHTML = `<span class="verdict ${ok ? "ok" : "bad"}">${ok ? "✓ Correct." : "✗ Not quite."}</span> ${q.explain}` +
+                   (q.demoNote ? `<br><em>${q.demoNote}</em>` : "");
+    if (onCheck) onCheck(q);
+  }
+
+  root.querySelector('[data-act="check"]').addEventListener("click", check);
+  root.querySelector('[data-act="next"]').addEventListener("click", () => { i = (i + 1) % questions.length; show(); });
+  show();
+}
+
+// Build the top navigation from every <section class="module" data-nav="...">
+function buildNav() {
+  const nav = document.getElementById("nav");
+  document.querySelectorAll("section.module[data-nav]").forEach((s) => {
+    const a = document.createElement("a");
+    a.href = "#" + s.id; a.textContent = s.dataset.nav;
+    nav.appendChild(a);
+  });
+}
+
+// If the Plotly CDN failed (offline), say so instead of leaving blank boxes
+function plotFallback() {
+  document.querySelectorAll(".plot").forEach((d) => {
+    d.innerHTML = '<div class="plot-fallback">The plotting library could not load (no internet?). Readouts, quiz and validation below still work.</div>';
+  });
+}
+
+
+/* =====================================================================
+   MODULE 1 — First-order time response (thermometer)
+   τ·dy/dt + y = K·x,  G(s) = K/(τs + 1)
+   ===================================================================== */
+const Module1 = (() => {
+  const T_MAX = 20;          // fixed time axis (s) so a change in τ is visible as a change in speed
+  const N = 401;             // samples per curve
+  const DEFAULTS = { K: 1, tau: 2, mode: "step", A: 5, r: 1 };
+  const S = Object.assign({}, DEFAULTS);   // current state
+
+  // Closed-form responses (zero initial condition)
+  const stepY = (t, K, tau, A) => K * A * (1 - Math.exp(-t / tau));
+  const rampY = (t, K, tau, r) => K * r * (t - tau + tau * Math.exp(-t / tau));
+
+  // The third slider means A for a step and r for a ramp
+  const INPUT_CFG = {
+    step: { label: "Step size <i>A</i>", min: 0.5, max: 10, step: 0.5, unit: "°C", decimals: 1 },
+    ramp: { label: "Ramp rate <i>r</i>", min: 0.1, max: 5, step: 0.1, unit: "°C/s", decimals: 1 },
+  };
+
+  let toggle, sK, sTau, sIn;     // control handles
+  const t = linspace(0, T_MAX, N);
+
+  // Sampled response for the current input
+  function response() {
+    const { K, tau, A, r } = S;
+    return S.mode === "step" ? t.map((ti) => stepY(ti, K, tau, A)) : t.map((ti) => rampY(ti, K, tau, r));
+  }
+
+  // Ramp lag and error measured from the curve at t* (5τ, kept inside the axis)
+  function rampMeasure() {
+    const { K, tau, r } = S;
+    const tStar = Math.min(5 * tau, 0.85 * T_MAX);
+    const yStar = rampY(tStar, K, tau, r);
+    const tIdeal = yStar / (K * r);                   // when the ideal line K·r·t reached the same value
+    return { tStar, yStar, tIdeal, lag: tStar - tIdeal, err: K * r * tStar - yStar };
+  }
+
+  // Error fraction Em(t) from the curve, and the slope of ln(Em) by least squares
+  function errorFraction(y) {
+    const { K, tau, A, r } = S;
+    const Em = S.mode === "step"
+      ? y.map((yi) => (K * A - yi) / (K * A))                          // step: (KA − y)/KA
+      : y.map((yi, k) => 1 - (K * r * t[k] - yi) / (K * r * tau));     // ramp: transient part of the error
+    const fx = [], fy = [];
+    for (let k = 1; k < N; k++) if (Em[k] >= 1e-3) { fx.push(t[k]); fy.push(Math.log(Em[k])); }  // fit on ln(Em)
+    const fit = fitLine(fx, fy);
+    return { Em, slope: fit.slope, intercept: fit.intercept, tauFit: -1 / fit.slope, tFitEnd: fx[fx.length - 1] };
+  }
+
+  /* ---------- Plot 1: step response ---------- */
+  function drawStep(y) {
+    const { K, tau, A } = S, KA = K * A;
+    const y1 = stepY(tau, K, tau, A), y3 = stepY(3 * tau, K, tau, A);
+    // Dotted guides from the axes to each marker
+    const guide = (x, yv) => [
+      { type: "line", x0: x, x1: x, y0: 0, y1: yv, line: { color: C("--axis"), width: 1, dash: "dot" } },
+      { type: "line", x0: 0, x1: x, y0: yv, y1: yv, line: { color: C("--axis"), width: 1, dash: "dot" } },
+    ];
+    drawPlot("m1-resp", [
+      { x: [0, T_MAX], y: [KA, KA], name: "Ideal output K·A", mode: "lines",
+        line: { color: C("--ideal"), width: 1.5, dash: "dash" }, hovertemplate: "K·A = %{y:.3f}<extra></extra>" },
+      { x: t, y, name: "Response y(t)", mode: "lines", line: { color: C("--s1"), width: 2.5 },
+        hovertemplate: "t = %{x:.2f} s<br>y = %{y:.3f}<extra></extra>" },
+      { x: [tau, 3 * tau], y: [y1, y3], name: "t = τ and t = 3τ", mode: "markers", customdata: ["63.2%", "95.0%"],
+        marker: { size: 11, color: C("--s2"), line: { color: C("--surface"), width: 2 } },
+        hovertemplate: "t = %{x:.2f} s<br>y = %{y:.3f} (%{customdata} of K·A)<extra></extra>" },
+    ], {
+      xaxis: { title: { text: "Time t (s)" }, range: [0, T_MAX] },
+      yaxis: { title: { text: "Output y" }, range: [0, KA * 1.15] },
+      shapes: guide(tau, y1).concat(guide(3 * tau, y3)),
+      annotations: [
+        plotNote(tau, y1, `t = τ: y = ${fmt(y1)} (63.2%)`, 22, 34),
+        plotNote(3 * tau, y3, `t = 3τ: y = ${fmt(y3)} (95%)`, 18, 40),
+        { x: T_MAX, y: KA, text: `K·A = ${fmt(KA)}`, showarrow: false, xanchor: "right", yanchor: "bottom",
+          font: { size: 11, color: C("--text-2") } },
+      ],
+    });
+  }
+
+  /* ---------- Plot 2: ramp response vs ideal K·r·t ---------- */
+  function drawRamp(y) {
+    const { K, tau, r } = S;
+    const m = rampMeasure();
+    drawPlot("m1-resp", [
+      { x: t, y: t.map((ti) => K * r * ti), name: "Ideal output K·r·t", mode: "lines",
+        line: { color: C("--ideal"), width: 1.5, dash: "dash" }, hovertemplate: "t = %{x:.2f} s<br>K·r·t = %{y:.3f}<extra></extra>" },
+      { x: t, y, name: "Response y(t)", mode: "lines", line: { color: C("--s1"), width: 2.5 },
+        hovertemplate: "t = %{x:.2f} s<br>y = %{y:.3f}<extra></extra>" },
+      // Horizontal segment = time lag, vertical segment = steady-state error (null breaks the line)
+      { x: [m.tIdeal, m.tStar, null, m.tStar, m.tStar], y: [m.yStar, m.yStar, null, m.yStar, K * r * m.tStar],
+        name: "Lag (↔) and error (↕)", mode: "lines", line: { color: C("--s2"), width: 3 }, hoverinfo: "skip" },
+    ], {
+      xaxis: { title: { text: "Time t (s)" }, range: [0, T_MAX] },
+      yaxis: { title: { text: "Output y" }, rangemode: "tozero" },
+      annotations: [{
+        xref: "paper", yref: "paper", x: 0.02, y: 0.98, xanchor: "left", yanchor: "top", showarrow: false, align: "left",
+        text: `Measured at t = ${fmt(m.tStar, 1)} s<br>lag = ${fmt(m.lag)} s  (τ = ${fmt(tau)} s)<br>error = ${fmt(m.err)}  (K·r·τ = ${fmt(K * r * tau)})`,
+        font: { size: 11, color: C("--text") }, bgcolor: C("--surface"), bordercolor: C("--border"), borderpad: 4,
+      }],
+    });
+  }
+
+  /* ---------- Plot 3: error fraction on a log axis ---------- */
+  function drawErrorFraction(ef) {
+    const { tau } = S;
+    // Keep points above 1e-4 so the log axis stays readable
+    const xs = [], ys = [];
+    ef.Em.forEach((e, k) => { if (e >= 1e-4) { xs.push(t[k]); ys.push(e); } });
+    const tLine = [0, ef.tFitEnd];
+    drawPlot("m1-em", [
+      { x: xs, y: ys, name: "Eₘ from the curve", mode: "lines", line: { color: C("--s1"), width: 2.5 },
+        hovertemplate: "t = %{x:.2f} s<br>Eₘ = %{y:.4f}<extra></extra>" },
+      { x: tLine, y: tLine.map((x) => Math.exp(ef.intercept + ef.slope * x)), name: "Fitted line, slope " + fmt(ef.slope, 4),
+        mode: "lines", line: { color: C("--s2"), width: 2, dash: "dash" }, hoverinfo: "skip" },
+      { x: [tau], y: [Math.exp(-1)], name: "t = τ", mode: "markers", showlegend: false,
+        marker: { size: 10, color: C("--s2"), line: { color: C("--surface"), width: 2 } },
+        hovertemplate: "t = τ = %{x:.2f} s<br>Eₘ = e⁻¹ = 0.368<extra></extra>" },
+    ], {
+      xaxis: { title: { text: "Time t (s)" }, range: [0, T_MAX] },
+      yaxis: { title: { text: "Eₘ (log scale)" }, type: "log", range: [-4, 0.1], dtick: 1, exponentformat: "power" },
+      annotations: [plotNote(tau, Math.exp(-1), "t = τ → Eₘ = e⁻¹ = 0.368", 18, -30)],
+    });
+  }
+
+  /* ---------- Readouts ---------- */
+  function updateReadouts(ef) {
+    const { K, tau, A, r } = S;
+    const yAt = (tt) => (S.mode === "step" ? stepY(tt, K, tau, A) : rampY(tt, K, tau, r));
+    const y1 = yAt(tau), y3 = yAt(3 * tau);
+    let items;
+    if (S.mode === "step") {
+      const KA = K * A;
+      items = [
+        { label: "y(τ)", value: fmt(y1), note: `${fmt(100 * y1 / KA, 1)}% of K·A = ${fmt(KA)}` },
+        { label: "y(3τ)", value: fmt(y3), note: `${fmt(100 * y3 / KA, 1)}% of K·A` },
+        { label: "Time lag", value: "0 s", note: `Step: no lag at steady state; y reaches 63.2% at t = τ = ${fmt(tau)} s` },
+        { label: "Steady-state error", value: "0", note: `y settles exactly at K·A = ${fmt(KA)}` },
+      ];
+    } else {
+      const m = rampMeasure();
+      items = [
+        { label: "y(τ)", value: fmt(y1), note: `ideal K·r·τ = ${fmt(K * r * tau)}` },
+        { label: "y(3τ)", value: fmt(y3), note: `ideal K·r·3τ = ${fmt(3 * K * r * tau)}` },
+        { label: "Time lag", value: `${fmt(m.lag)} s`, note: `theory: τ = ${fmt(tau)} s` },
+        { label: "Steady-state error", value: fmt(m.err), note: `theory: K·r·τ = ${fmt(K * r * tau)}` },
+      ];
+    }
+    renderReadouts(document.getElementById("m1-readouts"), items);
+
+    renderReadouts(document.getElementById("m1-slope"), [
+      { label: "Slope of ln(Eₘ), measured", value: `${fmt(ef.slope, 4)} s⁻¹`, note: "least-squares fit on the curve" },
+      { label: "Theory −1/τ", value: `${fmt(-1 / tau, 4)} s⁻¹`, note: `τ = ${fmt(tau)} s` },
+      { label: "τ recovered = −1/slope", value: `${fmt(ef.tauFit)} s`, note: `error ${fmt(100 * Math.abs(ef.tauFit - tau) / tau, 3)}%` },
+    ]);
+  }
+
+  /* ---------- Validation table ---------- */
+  function updateValidation(ef) {
+    const { K, tau, A, r } = S, KA = K * A, Krt = K * r * tau;
+    const within = (ours, exp, tol) => Math.abs(ours - exp) <= tol;
+    const y1 = stepY(tau, K, tau, A), y3 = stepY(3 * tau, K, tau, A);
+    const eSS = K * r * 10 * tau - rampY(10 * tau, K, tau, r);
+
+    // Independent check: solve the ODE numerically (RK4) and compare with the closed forms
+    const dt = tau / 50, steps = 250;   // 0 … 5τ
+    const ysStep = rk4((tt, yy) => (K * A - yy) / tau, 0, dt, steps);
+    const ysRamp = rk4((tt, yy) => (K * r * tt - yy) / tau, 0, dt, steps);
+    let gapStep = 0, gapRamp = 0;
+    for (let k = 0; k <= steps; k++) {
+      gapStep = Math.max(gapStep, Math.abs(ysStep[k] - stepY(k * dt, K, tau, A)) / KA);
+      gapRamp = Math.max(gapRamp, Math.abs(ysRamp[k] - rampY(k * dt, K, tau, r)) / Krt);
+    }
+
+    renderValidation(document.getElementById("m1-valid"), [
+      { test: "y(τ) = 0.632·K·A", expected: fmt(0.632 * KA), ours: fmt(y1), pass: within(y1, 0.632 * KA, 0.001 * KA) },
+      { test: "y(3τ) = 0.95·K·A", expected: fmt(0.95 * KA), ours: fmt(y3), pass: within(y3, 0.95 * KA, 0.001 * KA) },
+      { test: "τ recovered from slope of ln(Eₘ)", expected: `${fmt(tau)} s`, ours: `${fmt(ef.tauFit)} s`, pass: within(ef.tauFit, tau, 0.001 * tau) },
+      { test: "Ramp steady-state error = K·r·τ (at t = 10τ)", expected: fmt(Krt), ours: fmt(eSS), pass: within(eSS, Krt, 0.001 * Krt) },
+      { test: "Step formula = RK4 solution of the ODE", expected: "gap < 0.01% of K·A", ours: `${(100 * gapStep).toExponential(1)}%`, pass: gapStep < 1e-4 },
+      { test: "Ramp formula = RK4 solution of the ODE", expected: "gap < 0.01% of K·r·τ", ours: `${(100 * gapRamp).toExponential(1)}%`, pass: gapRamp < 1e-4 },
+    ]);
+  }
+
+  /* ---------- Redraw everything from the current state ---------- */
+  function render() {
+    const y = response();
+    const ef = errorFraction(y);
+    const isStep = S.mode === "step";
+    document.getElementById("m1-resp-title").textContent = isStep ? "Step response" : "Ramp response";
+    document.getElementById("m1-resp-cap").innerHTML = isStep
+      ? "Orange markers: t = τ (63.2% of K·A) and t = 3τ (95% of K·A). Dashed line: the ideal output K·A an instant sensor would show."
+      : "Dashed line: ideal output K·r·t. Orange segments, measured at t = 5τ (or the latest time on the axis): horizontal = time lag (→ τ), vertical = steady-state error (→ K·r·τ).";
+    document.getElementById("m1-em-cap").innerHTML = isStep
+      ? "Step: E<sub>m</sub> = (K·A − y)/(K·A) = e<sup>−t/τ</sup>. On a log axis this is a straight line: ln(E<sub>m</sub>) = −t/τ, slope −1/τ."
+      : "Ramp: the transient part of the error, E<sub>m</sub> = 1 − (K·r·t − y)/(K·r·τ) = e<sup>−t/τ</sup>, falls on the same straight line with slope −1/τ.";
+    isStep ? drawStep(y) : drawRamp(y);
+    drawErrorFraction(ef);
+    updateReadouts(ef);
+    updateValidation(ef);
+  }
+  const redraw = frameThrottle(render);
+
+  // Point the third slider at A or r depending on the input type
+  function syncInputSlider() {
+    sIn.configure(Object.assign({}, INPUT_CFG[S.mode], { value: S.mode === "step" ? S.A : S.r }));
+  }
+
+  // Set several values at once (used by Reset and by the quiz demos)
+  function setState(partial) {
+    Object.assign(S, partial);
+    toggle.set(S.mode); sK.set(S.K); sTau.set(S.tau);
+    syncInputSlider();
+    redraw();
+  }
+
+  /* ---------- Predict, then check: questions ---------- */
+  const QUESTIONS = [
+    { q: "Step input with τ = 1 s. If τ is doubled to 2 s, the time for the reading to reach 63.2% of K·A will…",
+      options: ["Halve", "Stay the same", "Double", "Quadruple"], answer: 2,
+      explain: "y(τ) = K·A(1 − e⁻¹) = 0.632·K·A for any τ, so the 63.2% point is always at t = τ. Doubling τ doubles that time: the thermometer is twice as slow.",
+      demo: { mode: "step", tau: 2 }, demoNote: "The plot now uses τ = 2 s — drag τ to 1 s and watch the τ marker move." },
+    { q: "Step input. If the static gain K is doubled, what happens?",
+      options: ["Final value doubles, speed is unchanged", "Final value and speed both double", "Speed doubles, final value is unchanged", "Nothing changes"], answer: 0,
+      explain: "K scales the whole curve (y → K·A) but τ alone sets the speed, so the markers stay at t = τ and 3τ.",
+      demo: { mode: "step", K: 2 }, demoNote: "The plot now uses K = 2 — note the markers are still at t = τ and 3τ." },
+    { q: "Step input. The step size A is tripled. At t = τ, the reading is what percentage of its new final value K·A?",
+      options: ["21.1%", "63.2%", "95%", "189.6%"], answer: 1,
+      explain: "The system is linear: y(t) = K·A(1 − e^(−t/τ)). Tripling A triples every value, so the fraction at t = τ is still 1 − e⁻¹ = 63.2%.",
+      demo: { mode: "step", A: 9 }, demoNote: "The plot now uses A = 9 °C — the readout still says 63.2% of K·A." },
+    { q: "Ramp input. At steady state, how far in time does the reading lag behind the ideal K·r·t line?",
+      options: ["τ", "3τ", "K·τ", "The lag keeps growing"], answer: 0,
+      explain: "For large t, e^(−t/τ) → 0 so y → K·r·(t − τ): the ideal line shifted right by exactly τ, whatever K and r are.",
+      demo: { mode: "ramp" }, demoNote: "The plot now shows the ramp response — compare the measured lag with τ." },
+    { q: "Ramp input. The ramp rate r is doubled (K and τ fixed). The steady-state error…",
+      options: ["Stays the same", "Doubles", "Halves", "Becomes zero"], answer: 1,
+      explain: "e_ss = K·r·τ is proportional to r. The time lag stays τ, but a steeper line means the same lag gives twice the error.",
+      demo: { mode: "ramp", r: 2 }, demoNote: "The plot now uses r = 2 °C/s — check the steady-state error readout." },
+    { q: "On the log-scale error-fraction plot, increasing τ makes the straight line…",
+      options: ["Steeper", "Flatter (slope closer to 0)", "Curved", "Shift up without changing slope"], answer: 1,
+      explain: "ln(Eₘ) = −t/τ, so the slope is −1/τ. A bigger τ means a smaller slope magnitude: the error dies out more slowly.",
+      demo: { mode: "step", tau: 4 }, demoNote: "The plot now uses τ = 4 s — the fitted slope is −0.25 s⁻¹." },
+  ];
+
+  /* ---------- Build controls and draw the first time ---------- */
+  function init() {
+    const box = document.getElementById("m1-controls");
+    toggle = createToggle(box, { label: "Input type", options: [{ value: "step", label: "Step" }, { value: "ramp", label: "Ramp" }], value: S.mode },
+      (v) => { S.mode = v; syncInputSlider(); redraw(); });
+    sK = createSlider(box, { id: "m1-K", label: "Static gain <i>K</i>", min: 0.1, max: 5, step: 0.1, value: S.K, decimals: 1 },
+      (v) => { S.K = v; redraw(); });
+    sTau = createSlider(box, { id: "m1-tau", label: "Time constant <i>τ</i>", min: 0.2, max: 4, step: 0.1, value: S.tau, unit: "s", decimals: 1 },
+      (v) => { S.tau = v; redraw(); });
+    sIn = createSlider(box, Object.assign({ id: "m1-in", value: S.A }, INPUT_CFG.step),
+      (v) => { if (S.mode === "step") S.A = v; else S.r = v; redraw(); });
+
+    document.getElementById("m1-reset").addEventListener("click", () => setState(DEFAULTS));
+    createQuiz(document.getElementById("m1-quiz"), QUESTIONS, (q) => setState(Object.assign({}, DEFAULTS, q.demo)));  // demo starts from defaults
+    render();
+  }
+
+  return { init, redraw };
+})();
+
+
+/* =====================================================================
+   START-UP — add Module2.init() etc. here when those modules exist
+   ===================================================================== */
+const MODULES = [Module1];
+
+buildNav();
+if (!window.Plotly) plotFallback();
+MODULES.forEach((m) => m.init());
+
+// Redraw plots when the phone/PC switches between light and dark mode
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => MODULES.forEach((m) => m.redraw()));
+</script>
+</body>
+</html>
