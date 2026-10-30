@@ -239,9 +239,12 @@ footer { color: var(--muted); font-size: .85rem; padding: 24px 0 32px; }
 
       <!-- Validation table -->
       <article class="card">
-        <h3>Validation</h3>
-        <p class="caption">Our formulas checked against the textbook values, live for the current sliders. Tolerance: 0.1% unless stated.</p>
+        <h3>Validation — Check 1 (lecture slides)</h3>
+        <p class="caption">First-order step: y(τ) = 0.632·K·A and y(3τ) = 0.95·K·A. Computed live for the current K, τ and A. Tolerance: 0.1% of K·A.</p>
         <div class="table-scroll" id="m1-valid"></div>
+        <h3 style="margin-top:20px">Extra checks</h3>
+        <p class="caption">Our own additional tests, not part of the six required checks.</p>
+        <div class="table-scroll" id="m1-valid-extra"></div>
       </article>
     </div>
   </section>
@@ -657,9 +660,14 @@ const Module1 = (() => {
       gapRamp = Math.max(gapRamp, Math.abs(ysRamp[k] - rampY(k * dt, K, tau, r)) / Krt);
     }
 
+    // Check 1 from the homework (§3.2), exactly as listed
     renderValidation(document.getElementById("m1-valid"), [
-      { test: "y(τ) = 0.632·K·A", expected: fmt(0.632 * KA), ours: fmt(y1), pass: within(y1, 0.632 * KA, 0.001 * KA) },
-      { test: "y(3τ) = 0.95·K·A", expected: fmt(0.95 * KA), ours: fmt(y3), pass: within(y3, 0.95 * KA, 0.001 * KA) },
+      { test: "1a. First-order step: y(τ) = 0.632·K·A", expected: fmt(0.632 * KA), ours: fmt(y1), pass: within(y1, 0.632 * KA, 0.001 * KA) },
+      { test: "1b. First-order step: y(3τ) = 0.95·K·A", expected: fmt(0.95 * KA), ours: fmt(y3), pass: within(y3, 0.95 * KA, 0.001 * KA) },
+    ]);
+
+    // Our own extra tests (kept separate so they are not confused with the six required checks)
+    renderValidation(document.getElementById("m1-valid-extra"), [
       { test: "τ recovered from slope of ln(Eₘ)", expected: `${fmt(tau)} s`, ours: `${fmt(ef.tauFit)} s`, pass: within(ef.tauFit, tau, 0.001 * tau) },
       { test: "Ramp steady-state error = K·r·τ (at t = 10τ)", expected: fmt(Krt), ours: fmt(eSS), pass: within(eSS, Krt, 0.001 * Krt) },
       { test: "Step formula = RK4 solution of the ODE", expected: "gap < 0.01% of K·A", ours: `${(100 * gapStep).toExponential(1)}%`, pass: gapStep < 1e-4 },
